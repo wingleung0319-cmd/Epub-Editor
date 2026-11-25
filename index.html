@@ -41,7 +41,7 @@
     <h1>Birdy EPUB Converter</h1>
     <p>TXT / EPUB 轉 EPUB + 繁簡轉換 · 全部喺瀏覽器本地做，唔上傳</p>
   </div>
-  <div class="version" title="OpenCC 完整字典 + 香港 hkp 詞組">v1.5.2</div>
+  <div class="version" title="OpenCC 完整字典 + 香港 hkp 詞組">v1.5.3</div>
 </header>
 
 <div class="wrap">
@@ -119,7 +119,7 @@
 /* ========== OpenCC 載入 ========== */
 let ccS2T = null, ccS2T_tw = null, ccT2S = null;
 let openccReady = false;
-const APP_VERSION = "1.5.2";
+const APP_VERSION = "1.5.3";
 
 function setStatus(msg, cls) {
   const el = document.getElementById("loadStatus");
@@ -472,9 +472,10 @@ function esc(s) {
 
 function xhtml(title, body) {
   return '<?xml version="1.0" encoding="utf-8"?>\n' +
-    '<!DOCTYPE html><html xmlns="http://www.w3.org/1999/xhtml">' +
-    '<head><title>' + esc(title) + '</title>' +
-    '<link rel="stylesheet" href="../Styles/style.css"/></head>' +
+    '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">\n' +
+    '<html xmlns="http://www.w3.org/1999/xhtml"><head><title>' + esc(title) + '</title>' +
+    '<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>' +
+    '<link rel="stylesheet" type="text/css" href="../Styles/style.css"/></head>' +
     '<body><h1>' + esc(title) + '</h1>' +
     body.split(/\n\s*\n|\n/).map(p => p.trim()).filter(Boolean).map(p => "<p>" + esc(p) + "</p>").join("") +
     '</body></html>';
@@ -486,22 +487,26 @@ document.getElementById("downloadBtn").onclick = async () => {
     if (!chapters.length) return;
     const title = document.getElementById("title").value || "我的小說";
     const author = document.getElementById("author").value || "作者";
+    const bookId = "urn:uuid:" + Date.now();
     const zip = new JSZip();
+    // mimetype 必須第一個 + 不壓縮，否則番茄 / 嚴格 Reader 會拒收
     zip.file("mimetype", "application/epub+zip", { compression: "STORE" });
     zip.folder("META-INF").file("container.xml",
-      '<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">' +
-      '<rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>');
+      '<?xml version="1.0" encoding="UTF-8"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>');
     const oebps = zip.folder("OEBPS");
-    // --- 封面：寫入 Images/cover.xxx + cover.xhtml + manifest/spine/meta ---
-    let coverManifest = "", coverSpine = "", coverMeta = "";
+    // --- 封面（EPUB 2 寫法，番茄認呢套） ---
+    let coverManifest = "", coverSpine = "", coverMeta = "", coverGuide = "", coverToc = "";
     if (coverData) {
       const coverPath = "Images/cover." + coverExt;
       oebps.file(coverPath, new Uint8Array(coverData));
-      coverManifest = '<item id="cover-img" href="' + coverPath + '" media-type="' + coverMime + '" properties="cover-image"/>' + '<item id="cover" href="Text/cover.xhtml" media-type="application/xhtml+xml"/>';
+      // EPUB 2 唔用 properties="cover-image"，用 <meta name="cover"> + guide
+      coverManifest = '<item id="cover-img" href="' + coverPath + '" media-type="' + coverMime + '"/>' + '<item id="cover" href="Text/cover.xhtml" media-type="application/xhtml+xml"/>';
       coverSpine = '<itemref idref="cover"/>';
       coverMeta = '<meta name="cover" content="cover-img"/>';
+      coverGuide = '<reference type="cover" title="Cover" href="Text/cover.xhtml"/>';
+      coverToc = '<navPoint id="np-cover" playOrder="1"><navLabel><text>封面</text></navLabel><content src="Text/cover.xhtml"/></navPoint>';
       oebps.file("Text/cover.xhtml",
-        '<?xml version="1.0" encoding="utf-8"?>\n<!DOCTYPE html><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>封面</title><meta charset="utf-8"/><style>body{margin:0;padding:0;text-align:center}img{max-width:100%;max-height:100vh}</style></head><body epub:type="cover"><img src="../' + coverPath + '" alt="cover"/></body></html>');
+        '<?xml version="1.0" encoding="utf-8"?>\n<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><title>封面</title><meta http-equiv="Content-Type" content="text/html; charset=utf-8"/><style type="text/css">body{margin:0;padding:0;text-align:center}img{max-width:100%;max-height:100vh}</style></head><body><div><img src="../' + coverPath + '" alt="cover"/></div></body></html>');
     }
     oebps.folder("Styles").file("style.css",
       "body{font-family:serif;line-height:1.8;margin:5%}h1{font-size:1.4em}p{text-indent:2em;margin:.5em 0}");
@@ -511,33 +516,38 @@ document.getElementById("downloadBtn").onclick = async () => {
       oebps.file(fn, xhtml(c.title, c.content.join("\n")));
       manifest += '<item id="ch' + (i + 1) + '" href="' + fn + '" media-type="application/xhtml+xml"/>';
       spine += '<itemref idref="ch' + (i + 1) + '"/>';
-      toc += '<navPoint id="np' + (i + 1) + '" playOrder="' + (i + 1) + '">' +
-        '<navLabel><text>' + esc(c.title) + '</text></navLabel><content src="' + fn + '"/></navPoint>';
+      // cover 佔咗 playOrder 1，章節由 2 開始
+      const order = coverData ? (i + 2) : (i + 1);
+      toc += '<navPoint id="np' + (i + 1) + '" playOrder="' + order + '"><navLabel><text>' + esc(c.title) + '</text></navLabel><content src="' + fn + '"/></navPoint>';
     });
-    oebps.file("Text/nav.xhtml",
-      '<?xml version="1.0" encoding="utf-8"?><!DOCTYPE html>' +
-      '<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">' +
-      '<head><title>目錄</title></head><body><nav epub:type="toc"><ol>' +
-      chapters.map((c, i) => '<li><a href="Text/ch' + (i + 1) + '.xhtml">' + esc(c.title) + '</a></li>').join("") +
-      '</ol></nav></body></html>');
+    // EPUB 2：唔用 nav.xhtml，目錄只靠 toc.ncx，番茄先認
+    const opfUid = bookId;
     oebps.file("content.opf",
-      '<?xml version="1.0" encoding="UTF-8"?>' +
-      '<package xmlns="http://www.idpf.org/2007/opf" unique-identifier="bookid" version="3.0">' +
-      '<metadata xmlns:dc="http://purl.org/dc/elements/1.1/">' +
-      '<dc:title>' + esc(title) + '</dc:title>' +
-      '<dc:creator>' + esc(author) + '</dc:creator>' +
-      '<dc:language>zh-Hant</dc:language>' +
-      '<dc:identifier id="bookid">urn:uuid:' + Date.now() + '</dc:identifier>' + coverMeta +
-      '</metadata><manifest>' + coverManifest +
-      '<item id="nav" href="Text/nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>' +
+      '<?xml version="1.0" encoding="UTF-8"?>\n' +
+      '<package xmlns="http://www.idpf.org/2007/opf" unique-identifier="bookid" version="2.0">\n' +
+      '<metadata xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:opf="http://www.idpf.org/2007/opf">\n' +
+      '<dc:title>' + esc(title) + '</dc:title>\n' +
+      '<dc:creator>' + esc(author) + '</dc:creator>\n' +
+      '<dc:language>zh-Hant</dc:language>\n' +
+      '<dc:identifier id="bookid">' + esc(opfUid) + '</dc:identifier>\n' +
+      '<dc:date>' + new Date().toISOString().slice(0,10) + '</dc:date>\n' +
+      coverMeta + '\n' +
+      '</metadata>\n' +
+      '<manifest>\n' + coverManifest + '\n' +
       manifest +
-      '<item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>' +
-      '</manifest><spine>' + coverSpine + spine + '</spine></package>');
+      '<item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>\n' +
+      '<item id="style" href="Styles/style.css" media-type="text/css"/>\n' +
+      '</manifest>\n' +
+      '<spine toc="ncx">' + coverSpine + spine + '</spine>\n' +
+      '<guide>' + coverGuide + '<reference type="text" title="正文" href="Text/ch1.xhtml"/></guide>\n' +
+      '</package>');
     oebps.file("toc.ncx",
-      '<?xml version="1.0" encoding="UTF-8"?>' +
-      '<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">' +
-      '<head></head><docTitle><text>' + esc(title) + '</text></docTitle><navMap>' + toc + '</navMap></ncx>');
-    const blob = await zip.generateAsync({ type: "blob" });
+      '<?xml version="1.0" encoding="UTF-8"?>\n' +
+      '<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">\n' +
+      '<head><meta name="dtb:uid" content="' + esc(opfUid) + '"/><meta name="dtb:depth" content="1"/><meta name="dtb:totalPageCount" content="0"/><meta name="dtb:maxPageNumber" content="0"/></head>\n' +
+      '<docTitle><text>' + esc(title) + '</text></docTitle>\n' +
+      '<navMap>' + coverToc + toc + '</navMap></ncx>');
+    const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 6 } });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = title + ".epub";
@@ -546,6 +556,7 @@ document.getElementById("downloadBtn").onclick = async () => {
     alert(e.message);
   }
 };
+
 
 /* ========== 手動分章操作 ========== */
 document.getElementById("btnRename").onclick = () => {
