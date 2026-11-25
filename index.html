@@ -41,7 +41,7 @@
     <h1>Birdy EPUB Converter</h1>
     <p>TXT / EPUB 轉 EPUB + 繁簡轉換 · 全部喺瀏覽器本地做，唔上傳</p>
   </div>
-  <div class="version" title="OpenCC 完整字典 + 香港 hkp 詞組">v1.5.3</div>
+  <div class="version" title="OpenCC 完整字典 + 香港 hkp 詞組">v1.6.0</div>
 </header>
 
 <div class="wrap">
@@ -74,6 +74,15 @@
       <option value="s2t_tw">簡體 → 繁體 (台灣 twp，含詞組)</option>
       <option value="t2s">繁體 → 簡體</option>
     </select>
+    <label>內文段落格式</label>
+    <label style="font-weight:400"><input type="checkbox" id="paraFormat" checked style="width:auto"> 轉為「內文段落格式」</label>
+    <div id="paraFormatDetail" style="background:#fafafa;border:1px solid #eee;border-radius:10px;padding:10px 12px;font-size:13px;color:#444;line-height:1.7">
+      勾住 = 生成嘅 EPUB 會用：<br>
+      • 首行縮排 2 字元（text-indent: 2em）<br>
+      • 段落間距：段落之間不空行（段前、段後距設為 0，margin: 0）<br>
+      • 行距設定：1.5 倍行距（line-height: 1.5）<br>
+      唔勾 = 用返舊格式：首行縮排 2 字、段間距 0.5em、行距 1.8
+    </div>
     <label>分章模式</label>
     <select id="split">
       <option value="auto">自動分章（用下面自設規則）</option>
@@ -119,7 +128,7 @@
 /* ========== OpenCC 載入 ========== */
 let ccS2T = null, ccS2T_tw = null, ccT2S = null;
 let openccReady = false;
-const APP_VERSION = "1.5.3";
+const APP_VERSION = "1.6.0";
 
 function setStatus(msg, cls) {
   const el = document.getElementById("loadStatus");
@@ -508,8 +517,11 @@ document.getElementById("downloadBtn").onclick = async () => {
       oebps.file("Text/cover.xhtml",
         '<?xml version="1.0" encoding="utf-8"?>\n<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><title>封面</title><meta http-equiv="Content-Type" content="text/html; charset=utf-8"/><style type="text/css">body{margin:0;padding:0;text-align:center}img{max-width:100%;max-height:100vh}</style></head><body><div><img src="../' + coverPath + '" alt="cover"/></div></body></html>');
     }
-    oebps.folder("Styles").file("style.css",
-      "body{font-family:serif;line-height:1.8;margin:5%}h1{font-size:1.4em}p{text-indent:2em;margin:.5em 0}");
+    const usePara = document.getElementById("paraFormat") ? document.getElementById("paraFormat").checked : true;
+    const epubCss = usePara
+      ? "body{font-family:serif;line-height:1.5;margin:5%}h1{font-size:1.4em;line-height:1.5;margin:0 0 1em 0}p{text-indent:2em;margin:0;padding:0;line-height:1.5}"
+      : "body{font-family:serif;line-height:1.8;margin:5%}h1{font-size:1.4em}p{text-indent:2em;margin:.5em 0;line-height:1.8}";
+    oebps.folder("Styles").file("style.css", epubCss);
     let manifest = "", spine = "", toc = "";
     chapters.forEach((c, i) => {
       const fn = "Text/ch" + (i + 1) + ".xhtml";
@@ -557,6 +569,17 @@ document.getElementById("downloadBtn").onclick = async () => {
   }
 };
 
+
+
+/* ========== 內文段落格式：預覽都跟返 ========== */
+function applyParaPreview(){
+  const p = document.getElementById("preview");
+  const usePara = document.getElementById("paraFormat") ? document.getElementById("paraFormat").checked : true;
+  if (!p) return;
+  if (usePara) { p.style.textIndent = "2em"; p.style.lineHeight = "1.5"; }
+  else { p.style.textIndent = "2em"; p.style.lineHeight = "1.8"; }
+}
+document.getElementById("paraFormat").addEventListener("change", applyParaPreview);
 
 /* ========== 手動分章操作 ========== */
 document.getElementById("btnRename").onclick = () => {
