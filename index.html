@@ -41,7 +41,7 @@
     <h1>Birdy EPUB Converter</h1>
     <p>TXT / EPUB 轉 EPUB + 繁簡轉換 · 全部喺瀏覽器本地做，唔上傳</p>
   </div>
-  <div class="version" title="OpenCC 完整字典 + 香港 hkp 詞組">v1.6.2</div>
+  <div class="version" title="OpenCC 完整字典 + 香港 hkp 詞組">v1.6.3</div>
 </header>
 
 <div class="wrap">
@@ -128,7 +128,7 @@
 /* ========== OpenCC 載入 ========== */
 let ccS2T = null, ccS2T_tw = null, ccT2S = null;
 let openccReady = false;
-const APP_VERSION = "1.6.2";
+const APP_VERSION = "1.6.3";
 
 function setStatus(msg, cls) {
   const el = document.getElementById("loadStatus");
@@ -560,16 +560,30 @@ function esc(s) {
     .replace(/"/g, "&quot;");
 }
 
-function xhtml(title, body) {
+function xhtml(title, body, usePara) {
+  // 番茄會無視外部 style.css，所以每段都要寫死 inline style + 每章 head 入面再寫一次 <style>
+  const para = usePara !== false;
+  const pInline = para
+    ? 'text-indent:2em;margin:0;padding:0;line-height:1.5;'
+    : 'text-indent:2em;margin:.5em 0;padding:0;line-height:1.8;';
+  const h1Inline = para
+    ? 'font-size:1.4em;line-height:1.5;margin:0 0 1em 0;'
+    : 'font-size:1.4em;line-height:1.8;margin:0 0 .5em 0;';
+  const bodyInline = para ? 'line-height:1.5;margin:5%;' : 'line-height:1.8;margin:5%;';
+  const headStyle = para
+    ? 'body{font-family:serif;line-height:1.5;margin:5%}h1{font-size:1.4em;line-height:1.5;margin:0 0 1em 0}p{text-indent:2em;margin:0;padding:0;line-height:1.5}'
+    : 'body{font-family:serif;line-height:1.8;margin:5%}h1{font-size:1.4em;line-height:1.8;margin:0 0 .5em 0}p{text-indent:2em;margin:.5em 0;padding:0;line-height:1.8}';
   return '<?xml version="1.0" encoding="utf-8"?>\n' +
     '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN" "http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">\n' +
     '<html xmlns="http://www.w3.org/1999/xhtml"><head><title>' + esc(title) + '</title>' +
     '<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>' +
-    '<link rel="stylesheet" type="text/css" href="../Styles/style.css"/></head>' +
-    '<body><h1>' + esc(title) + '</h1>' +
-    body.split(/\n\s*\n|\n/).map(p => p.trim()).filter(Boolean).map(p => "<p>" + esc(p) + "</p>").join("") +
+    '<link rel="stylesheet" type="text/css" href="../Styles/style.css"/>' +
+    '<style type="text/css">' + headStyle + '</style></head>' +
+    '<body style="' + bodyInline + '"><h1 style="' + h1Inline + '">' + esc(title) + '</h1>' +
+    body.split(/\n\s*\n|\n/).map(p => p.trim()).filter(Boolean).map(p => '<p style="' + pInline + '">' + esc(p) + '</p>').join("") +
     '</body></html>';
 }
+
 
 document.getElementById("downloadBtn").onclick = async () => {
   try {
@@ -606,7 +620,7 @@ document.getElementById("downloadBtn").onclick = async () => {
     let manifest = "", spine = "", toc = "";
     chapters.forEach((c, i) => {
       const fn = "Text/ch" + (i + 1) + ".xhtml";
-      oebps.file(fn, xhtml(c.title, c.content.join("\n")));
+      oebps.file(fn, xhtml(c.title, c.content.join("\n"), usePara));
       manifest += '<item id="ch' + (i + 1) + '" href="' + fn + '" media-type="application/xhtml+xml"/>';
       spine += '<itemref idref="ch' + (i + 1) + '"/>';
       // cover 佔咗 playOrder 1，章節由 2 開始
