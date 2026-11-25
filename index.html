@@ -41,7 +41,7 @@
     <h1>Birdy EPUB Converter</h1>
     <p>TXT / EPUB 轉 EPUB + 繁簡轉換 · 全部喺瀏覽器本地做，唔上傳</p>
   </div>
-  <div class="version" title="OpenCC 完整字典 + 香港 hkp 詞組">v1.6.1</div>
+  <div class="version" title="OpenCC 完整字典 + 香港 hkp 詞組">v1.6.2</div>
 </header>
 
 <div class="wrap">
@@ -128,7 +128,7 @@
 /* ========== OpenCC 載入 ========== */
 let ccS2T = null, ccS2T_tw = null, ccT2S = null;
 let openccReady = false;
-const APP_VERSION = "1.6.1";
+const APP_VERSION = "1.6.2";
 
 function setStatus(msg, cls) {
   const el = document.getElementById("loadStatus");
@@ -398,7 +398,58 @@ async function parseEpubFile(file){
     if (chTitle) fullText += chTitle + "\n\n";
     fullText += lines.join("\n\n") + "\n\n";
   }
-  return { text: fullText.trim(), title: bookTitle, author: bookAuthor };
+    // --- 抽原 EPUB 封面 ---
+  let coverDataOut = null, coverMimeOut = "", coverExtOut = "", coverNameOut = "";
+  try {
+    // 1. 先搵 <meta name="cover" content="xxx">
+    let coverId = "";
+    opfDoc.querySelectorAll("metadata meta").forEach(m => {
+      if ((m.getAttribute("name") || "").toLowerCase() === "cover") coverId = m.getAttribute("content") || "";
+    });
+    let coverHref = "";
+    let coverMedia = "";
+    if (coverId && manifest[coverId]) {
+      coverHref = manifest[coverId];
+      const it = opfDoc.querySelector('manifest > item[id="' + coverId + '"]');
+      if (it) coverMedia = it.getAttribute("media-type") || "";
+    }
+    // 2. 搵唔到就搵 properties="cover-image"
+    if (!coverHref) {
+      opfDoc.querySelectorAll("manifest > item").forEach(it => {
+        const props = (it.getAttribute("properties") || "").toLowerCase();
+        if (props.includes("cover-image")) { coverHref = it.getAttribute("href"); coverMedia = it.getAttribute("media-type") || ""; }
+      });
+    }
+    // 3. 再搵唔到就搵 id / href 有 cover 字眼 + 係圖片
+    if (!coverHref) {
+      opfDoc.querySelectorAll("manifest > item").forEach(it => {
+        const id = (it.getAttribute("id") || "").toLowerCase();
+        const href = (it.getAttribute("href") || "").toLowerCase();
+        const mt = (it.getAttribute("media-type") || "").toLowerCase();
+        if (mt.startsWith("image/") && (id.includes("cover") || href.includes("cover"))) {
+          coverHref = it.getAttribute("href"); coverMedia = it.getAttribute("media-type") || "";
+        }
+      });
+    }
+    // 4. 再搵唔到就搵第一張圖片（好多舊 EPUB 封面就係第一張圖）
+    if (!coverHref) {
+      const firstImg = Array.from(opfDoc.querySelectorAll("manifest > item")).find(it => ((it.getAttribute("media-type") || "").toLowerCase().startsWith("image/")));
+      if (firstImg) { coverHref = firstImg.getAttribute("href"); coverMedia = firstImg.getAttribute("media-type") || ""; }
+    }
+    if (coverHref) {
+      try { coverHref = decodeURIComponent(coverHref); } catch(e){}
+      const coverFull = (opfDir + coverHref).replace(/\/\.\//g, "/");
+      const coverEntry = zip.file(coverFull) || zip.file(coverHref) || zip.file(coverFull.split("/").pop());
+      if (coverEntry) {
+        coverDataOut = await coverEntry.async("arraybuffer");
+        coverMimeOut = coverMedia || (coverHref.toLowerCase().endsWith(".png") ? "image/png" : coverHref.toLowerCase().endsWith(".webp") ? "image/webp" : coverHref.toLowerCase().endsWith(".gif") ? "image/gif" : "image/jpeg");
+        coverExtOut = coverMimeOut.includes("png") ? "png" : coverMimeOut.includes("webp") ? "webp" : coverMimeOut.includes("gif") ? "gif" : "jpg";
+        coverNameOut = coverHref.split("/").pop();
+      }
+    }
+  } catch(e) { console.warn("抽封面失敗", e); }
+
+  return { text: fullText.trim(), title: bookTitle, author: bookAuthor, coverData: coverDataOut, coverMime: coverMimeOut, coverExt: coverExtOut, coverName: coverNameOut };
 }
 
 /* ========== 封面 ========== */
@@ -447,7 +498,23 @@ document.getElementById("file").addEventListener("change", async e => {
       document.getElementById("input").value = parsed.text;
       if (parsed.title) document.getElementById("title").value = parsed.title;
       if (parsed.author) document.getElementById("author").value = parsed.author;
-      if (statusEl) statusEl.textContent = "EPUB 已載入：共 " + parsed.text.length + " 字" + (parsed.title ? " · 《" + parsed.title + "》" : "") + "，㩒「預覽」即做繁簡轉換 + 分章";
+      // 原 EPUB 有封面 -> 自動顯示，唔使重新上傳；之後下載會用返呢張封面，除非用戶再上傳新封面
+      if (parsed.coverData) {
+        coverData = parsed.coverData; coverMime = parsed.coverMime || "image/jpeg"; coverExt = parsed.coverExt || "jpg"; coverName = parsed.coverName || "cover";
+        const preview = document.getElementById("coverPreview");
+        preview.src = URL.createObjectURL(new Blob([coverData], { type: coverMime }));
+        preview.style.display = "block";
+        document.getElementById("coverInfo").textContent = "已用原 EPUB 封面：" + coverName + "（如要換封面，再上傳新圖即可）";
+        document.getElementById("btnRemoveCover").style.display = "block";
+      } else {
+        // 冇封面就清返之前嗰張，避免用咗上一本書嘅封面
+        coverData = null; coverName = "";
+        const preview = document.getElementById("coverPreview");
+        preview.src = ""; preview.style.display = "none";
+        document.getElementById("coverInfo").textContent = "原 EPUB 冇封面（可自行上傳）";
+        document.getElementById("btnRemoveCover").style.display = "none";
+      }
+      if (statusEl) statusEl.textContent = "EPUB 已載入：共 " + parsed.text.length + " 字" + (parsed.coverData ? " · 已抽出原封面" : " · 原書冇封面") + (parsed.title ? " · 《" + parsed.title + "》" : "") + "，㩒「預覽」即做繁簡轉換 + 分章";
       // 自動預覽，等用戶即刻見到轉換 + 分章結果
       if (openccReady) document.getElementById("previewBtn").click();
     } else {
