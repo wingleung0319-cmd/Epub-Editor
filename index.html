@@ -3,6 +3,7 @@
 <title>EPUB Editor - TXT 轉 EPUB + 繁簡轉換</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js">
 </script>
+<script src="https://cdn.jsdelivr.net/npm/opencc-js@1.0.5/dist/umd/full.js"></script>
 <style>body{font-family:-apple-system,"PingFang HK","Microsoft JhengHei",sans-serif;background:#f6f7f9;margin:0;color:#111}header{background:#111;color:#fff;padding:18px 20px}header h1{margin:0;font-size:22px}header p{margin:6px 0 0;opacity:.8}.wrap{max-width:1100px;margin:0 auto;padding:16px;display:grid;grid-template-columns:1fr 1fr;gap:16px}@media(max-width:800px){.wrap{grid-template-columns:1fr}}.card{background:#fff;border-radius:14px;padding:16px;box-shadow:0 2px 12px rgba(0,0,0,.06)}label{display:block;font-weight:700;margin:12px 0 6px}input,select,textarea{width:100%;box-sizing:border-box;border:1px solid #ddd;border-radius:10px;padding:10px;font-size:15px}textarea{min-height:280px;line-height:1.7}button{border:0;border-radius:10px;padding:12px 16px;font-weight:800;cursor:pointer;background:#111;color:#fff;width:100%;margin-top:12px}button.secondary{background:#eee;color:#111}button:disabled{opacity:.5}.row{display:flex;gap:8px}.row button{flex:1}.chip{display:inline-block;background:#eef;padding:4px 10px;border-radius:999px;font-size:13px;margin:2px}.chapters{max-height:300px;overflow:auto;border:1px solid #eee;border-radius:10px;padding:8px}.chapters div{padding:8px;border-bottom:1px solid #f0f0f0;cursor:pointer}.chapters div.active{background:#fff3c4}.preview{white-space:pre-wrap;line-height:1.8;max-height:420px;overflow:auto;background:#fafafa;padding:12px;border-radius:10px}.small{font-size:13px;color:#666}</style></head>
 <body><header><h1>EPUB Editor</h1><p>TXT 轉 EPUB + 繁簡轉換 · 全部喺瀏覽器本地做，唔上傳</p></header>
 
@@ -12,7 +13,7 @@
 <textarea id="convTestIn" style="min-height:80px">这是一个例子，认识这个世界，为什么会来到这里？头发后面里面软件网络发展发现</textarea>
 <div class="row"><button id="btnS2T" type="button">簡體 → 繁體</button><button id="btnT2S" type="button" class="secondary">繁體 → 簡體</button></div>
 <textarea id="convTestOut" style="min-height:80px" readonly placeholder="轉換結果會喺呢度"></textarea>
-<p id="convTestMsg" class="small">未測試</p>
+<p id="convTestMsg" class="small">未測試 · <span id="ccStatus">檢查緊 OpenCC…</span></p>
 <button id="btnUseResult" type="button" class="secondary">將轉換結果送去下面做 EPUB →</button>
 </div></div>
 <div class="wrap">
@@ -36,14 +37,33 @@ Object.assign(S2T,{"开":"開","关":"關","发":"發","干":"幹","发":"發","
 // 補充片語（先換片語，再逐字）
 const PHRASE_S2T={"头发":"頭髮","后面":"後面","里面":"裡面","外面":"外面","干什么":"幹什麼","为什么":"為什麼","这么":"這麼","怎么":"怎麼","这样":"這樣","这里":"這裡","那里":"那裡","哪里":"哪裡","这些":"這些","那些":"那些","这个":"這個","那个":"那個","什么":"什麼","认识":"認識","觉得":"覺得","知道":"知道","看到":"看到","听到":"聽到","说":"說","软件":"軟件","开始":"開始","发展":"發展","发现":"發現","发出":"發出","发生":"發生","头发":"頭髮","干杯":"乾杯","干净":"乾淨","干燥":"乾燥","面包":"麵包","面粉":"麵粉","面条":"麵條","里面":"裡面","后面":"後面","前门":"前門","后门":"後門","开门":"開門","关心":"關心","关于":"關於","军队":"軍隊","运气":"運氣","运送":"運送","远程":"遠程","远方":"遠方","远远":"遠遠","这么":"這麼","那么":"那麼","怎么":"怎麼","怎样":"怎樣","这里":"這裡","那里":"那裡","哪里":"哪裡","这个":"這個","那个":"那個","这些":"這些","那些":"那些","什么":"什麼","为什么":"為什麼","认识":"認識","认为":"認為","觉得":"覺得","听说":"聽說","说话":"說話","语言":"語言","语音":"語音","音乐":"音樂","电影":"電影","电视":"電視","电脑":"電腦","手机":"手機","电话":"電話","头发":"頭髮","网络":"網絡","视频":"影片","鼠标":"滑鼠","打印机":"打印機","手机":"手機","电脑":"電腦"};
 const PHRASE_T2S={"頭髮":"头发","後面":"后面","裡面":"里面","為什麼":"为什么","這麼":"这么","怎麼":"怎么","這樣":"这样","這裡":"这里","那裡":"那里","哪裡":"哪里","這些":"这些","那些":"那些","這個":"这个","那個":"那个","什麼":"什么","認識":"认识","覺得":"觉得","聽到":"听到","軟件":"软件","網絡":"网络","影片":"视频","滑鼠":"鼠标","打印機":"打印机","手機":"手机","電腦":"电脑"};
+
+// === 完全轉換：優先用 OpenCC 全字庫（幾千字 + 詞組），唔用細對照表 ===
+let _ccS2T=null, _ccT2S=null;
+function getCC(mode){
+  try{
+    if(typeof OpenCC==="undefined") return null;
+    if(mode==="s2t"){ if(!_ccS2T) _ccS2T=OpenCC.Converter({from:"cn",to:"tw"}); return _ccS2T; }
+    if(mode==="t2s"){ if(!_ccT2S) _ccT2S=OpenCC.Converter({from:"tw",to:"cn"}); return _ccT2S; }
+  }catch(e){ return null; }
+  return null;
+}
 function convert(text,mode){
  if(mode==="none") return text;
+ // 1) OpenCC 全轉換
+ let cc=getCC(mode);
+ if(cc){ try{ let out=cc.convert(text); if(out && out!==text) return out; if(out) return out; }catch(e){} }
+ // 2) Fallback: 舊對照表（OpenCC 未 load 到先用）
  let phrase = mode==="s2t"?PHRASE_S2T:PHRASE_T2S;
  let map = mode==="s2t"?S2T:null;
  if(mode==="t2s"){ map={}; for(let k in S2T) map[S2T[k]]=k; }
  for(let k in phrase) text=text.split(k).join(phrase[k]);
  if(map) text=text.split("").map(c=>map[c]||c).join("");
  return text;
+}
+function convertInfo(){
+  if(typeof OpenCC!=="undefined") return "OpenCC 全字庫已載入";
+  return "OpenCC 載入中 / 已用備用表";
 }
 let chapters=[];
 function splitChapters(text){
@@ -124,4 +144,6 @@ document.getElementById("btnUseResult").onclick=()=>{
   alert("已送去下面，繁簡轉換選項已設為「不轉換」，避免重複轉兩次");
 };
 
+
+setTimeout(()=>{ let el=document.getElementById("ccStatus"); if(el) el.textContent=convertInfo(); }, 1000);
 </script></body></html>
