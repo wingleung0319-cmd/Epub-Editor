@@ -41,7 +41,7 @@
     <h1>Birdy EPUB Converter</h1>
     <p>TXT / EPUB 轉 EPUB + 繁簡轉換 · 全部喺瀏覽器本地做，唔上傳</p>
   </div>
-  <div class="version" title="OpenCC 完整字典 + 香港 hkp 詞組">v1.4.0</div>
+  <div class="version" title="OpenCC 完整字典 + 香港 hkp 詞組">v1.5.0</div>
 </header>
 
 <div class="wrap">
@@ -61,6 +61,12 @@
     <input id="title" value="我的小說">
     <label>作者</label>
     <input id="author" value="作者">
+    <label>上傳封面（可選，JPG / PNG / WebP）</label>
+    <input type="file" id="coverFile" accept="image/jpeg,image/png,image/webp,image/gif">
+    <img id="coverPreview" style="display:none;width:100%;max-height:320px;object-fit:contain;border:1px solid #eee;border-radius:10px;margin-top:8px" alt="封面預覽">
+    <p class="small" id="coverInfo">未選封面（可留空）</p>
+    <button id="btnRemoveCover" type="button" class="secondary" style="display:none">移除封面</button>
+    <p class="small">封面會做埋入新 EPUB 嘅第一頁，同埋設為 EPUB 封面，閱讀器會顯示。唔上傳就用返原本（TXT 轉出嚟就冇封面）。</p>
     <label>繁簡轉換</label>
     <select id="conv">
       <option value="none">不轉換</option>
@@ -113,7 +119,7 @@
 /* ========== OpenCC 載入 ========== */
 let ccS2T = null, ccS2T_tw = null, ccT2S = null;
 let openccReady = false;
-const APP_VERSION = "1.4.0";
+const APP_VERSION = "1.5.0";
 
 function setStatus(msg, cls) {
   const el = document.getElementById("loadStatus");
@@ -354,6 +360,38 @@ async function parseEpubFile(file){
   return { text: fullText.trim(), title: bookTitle, author: bookAuthor };
 }
 
+/* ========== 封面 ========== */
+let coverData = null; // ArrayBuffer
+let coverMime = "image/jpeg";
+let coverExt = "jpg";
+let coverName = "";
+document.getElementById("coverFile").addEventListener("change", e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  coverMime = f.type || "image/jpeg";
+  coverExt = coverMime.includes("png") ? "png" : coverMime.includes("webp") ? "webp" : coverMime.includes("gif") ? "gif" : "jpg";
+  coverName = f.name;
+  const r = new FileReader();
+  r.onload = () => {
+    coverData = r.result; // ArrayBuffer
+    const preview = document.getElementById("coverPreview");
+    const url = URL.createObjectURL(new Blob([coverData], { type: coverMime }));
+    preview.src = url;
+    preview.style.display = "block";
+    document.getElementById("coverInfo").textContent = "已選封面：" + f.name + "（" + Math.round(f.size/1024) + " KB，將入埋新 EPUB）";
+    document.getElementById("btnRemoveCover").style.display = "block";
+  };
+  r.readAsArrayBuffer(f);
+  e.target.value = "";
+});
+document.getElementById("btnRemoveCover").onclick = () => {
+  coverData = null; coverName = "";
+  const p = document.getElementById("coverPreview");
+  p.src = ""; p.style.display = "none";
+  document.getElementById("coverInfo").textContent = "未選封面（可留空）";
+  document.getElementById("btnRemoveCover").style.display = "none";
+};
+
 /* ========== 事件 ========== */
 document.getElementById("file").addEventListener("change", async e => {
   const f = e.target.files[0];
@@ -436,6 +474,17 @@ document.getElementById("downloadBtn").onclick = async () => {
       '<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">' +
       '<rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>');
     const oebps = zip.folder("OEBPS");
+    // --- 封面：寫入 Images/cover.xxx + cover.xhtml + manifest/spine/meta ---
+    let coverManifest = "", coverSpine = "", coverMeta = "";
+    if (coverData) {
+      const coverPath = "Images/cover." + coverExt;
+      oebps.file(coverPath, coverData);
+      coverManifest = '<item id="cover-img" href="' + coverPath + '" media-type="' + coverMime + '" properties="cover-image"/>' + '<item id="cover" href="Text/cover.xhtml" media-type="application/xhtml+xml"/>';
+      coverSpine = '<itemref idref="cover"/>';
+      coverMeta = '<meta name="cover" content="cover-img"/>';
+      oebps.file("Text/cover.xhtml",
+        '<?xml version="1.0" encoding="utf-8"?><!DOCTYPE html><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>封面</title><style>body{margin:0;text-align:center}img{max-width:100%;max-height:100vh}</style></head><body><img src="../' + coverPath + '" alt="cover"/></body></html>');
+    }
     oebps.folder("Styles").file("style.css",
       "body{font-family:serif;line-height:1.8;margin:5%}h1{font-size:1.4em}p{text-indent:2em;margin:.5em 0}");
     let manifest = "", spine = "", toc = "";
@@ -465,7 +514,7 @@ document.getElementById("downloadBtn").onclick = async () => {
       '<item id="nav" href="Text/nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>' +
       manifest +
       '<item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>' +
-      '</manifest><spine>' + spine + '</spine></package>');
+      '</manifest><spine>' + coverSpine + spine + '</spine></package>');
     oebps.file("toc.ncx",
       '<?xml version="1.0" encoding="UTF-8"?>' +
       '<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">' +
