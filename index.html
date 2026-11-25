@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-HK"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EPUB Editor - TXT 轉 EPUB + 繁簡轉換</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>body{font-family:-apple-system,"PingFang HK","Microsoft JhengHei",sans-serif;background:#f6f7f9;margin:0;color:#111}header{background:#111;color:#fff;padding:18px 20px}header h1{margin:0;font-size:22px}header p{margin:6px 0 0;opacity:.8}.wrap{max-width:1100px;margin:0 auto;padding:16px;display:grid;grid-template-columns:1fr 1fr;gap:16px}@media(max-width:800px){.wrap{grid-template-columns:1fr}}.card{background:#fff;border-radius:14px;padding:16px;box-shadow:0 2px 12px rgba(0,0,0,.06)}label{display:block;font-weight:700;margin:12px 0 6px}input,select,textarea{width:100%;box-sizing:border-box;border:1px solid #ddd;border-radius:10px;padding:10px;font-size:15px}textarea{min-height:280px;line-height:1.7}button{border:0;border-radius:10px;padding:12px 16px;font-weight:800;cursor:pointer;background:#111;color:#fff;width:100%;margin-top:12px}button.secondary{background:#eee;color:#111}button:disabled{opacity:.5}.row{display:flex;gap:8px}.row button{flex:1}.chip{display:inline-block;background:#eef;padding:4px 10px;border-radius:999px;font-size:13px;margin:2px}.chapters{max-height:300px;overflow:auto;border:1px solid #eee;border-radius:10px;padding:8px}.chapters div{padding:8px;border-bottom:1px solid #f0f0f0;cursor:pointer}.chapters div.active{background:#fff3c4}.preview{white-space:pre-wrap;line-height:1.8;max-height:420px;overflow:auto;background:#fafafa;padding:12px;border-radius:10px}.small{font-size:13px;color:#666}</style></head>
+<body><header><h1>EPUB Editor</h1><p>TXT 轉 EPUB + 繁簡轉換 · 全部喺瀏覽器本地做，唔上傳</p></header>
+<div class="wrap">
+<div class="card"><h2 style="margin:0">1. 輸入文字</h2>
+<label>上傳 TXT</label><input type="file" id="file" accept=".txt,text/plain">
+<label>或直接貼文字</label><textarea id="input" placeholder="貼入小說內文…&#10;&#10;第1章 開始&#10;內容…&#10;&#10;第2章 …"></textarea>
+<label>書名</label><input id="title" value="我的小說">
+<label>作者</label><input id="author" value="作者">
+<label>繁簡轉換</label><select id="conv"><option value="none">不轉換</option><option value="s2t">簡體 → 繁體</option><option value="t2s">繁體 → 簡體</option></select>
+<label>分章規則（偵測「第X章 / 第X回 / Chapter」）</label><select id="split"><option value="auto">自動分章</option><option value="one">成書一章</option></select>
+<button id="previewBtn">預覽轉換 + 分章</button>
+<button id="downloadBtn" class="secondary">⬇ 生成並下載 EPUB</button>
+<p class="small">提示：上傳後會自動填入文字框。章節標題行會自動變成章節。</p>
+</div>
+<div class="card"><h2 style="margin:0">2. 預覽</h2><p class="small" id="stats">未預覽</p><h3>章節列表</h3><div class="chapters" id="chapters"><div>按「預覽」先</div></div><h3>內容預覽（點章節可切換）</h3><div class="preview" id="preview">—</div></div>
+</div>
+<script>
+// 簡繁常用對照（精簡常用字詞表，覆蓋常見小說用字）
+const S2T = {"爱":"愛","碍":"礙","罢":"罷","贝":"貝","备":"備","变":"變","标":"標","表":"錶","并":"併","补":"補","才":"才","采":"採","参":"參","仓":"倉","产":"產","长":"長","尝":"嘗","车":"車","彻":"徹","陈":"陳","称":"稱","诚":"誠","迟":"遲","冲":"衝","丑":"醜","出":"出","处":"處","传":"傳","创":"創","吹":"吹","纯":"純","辞":"辭","从":"從","达":"達","带":"帶","单":"單","当":"當","党":"黨","导":"導","灯":"燈","邓":"鄧","敌":"敵","递":"遞","点":"點","电":"電","冬":"冬","动":"動","斗":"鬥","读":"讀","对":"對","多":"多","夺":"奪","发":"發","法":"法","反":"反","饭":"飯","方":"方","房":"房","放":"放","飞":"飛","废":"廢","费":"費","分":"分","风":"風","封":"封","丰":"豐","冯":"馮","凤":"鳳","夫":"夫","妇":"婦","复":"複","该":"該","干":"幹","赶":"趕","个":"個","给":"給","观":"觀","关":"關","馆":"館","广":"廣","归":"歸","贵":"貴","国":"國","过":"過","还":"還","汉":"漢","号":"號","合":"合","和":"和","河":"河","红":"紅","后":"後","华":"華","画":"畫","话":"話","怀":"懷","坏":"壞","欢":"歡","环":"環","还":"還","回":"回","会":"會","获":"獲","机":"機","积":"積","极":"極","际":"際","继":"繼","家":"家","价":"價","坚":"堅","间":"間","见":"見","将":"將","蒋":"蔣","讲":"講","交":"交","脚":"腳","叫":"叫","接":"接","节":"節","结":"結","解":"解","届":"屆","进":"進","远":"遠","运":"運","这":"這","这":"這","这里":"這裡","这么":"這麼","怎么":"怎麼","怎么样":"怎麼樣","这样":"這樣","这些":"這些","那些":"那些","哪个":"哪個","哪里":"哪裡","谁":"誰","什么":"什麼","为什么":"為什麼","时候":"時候","当时":"當時","现在":"現在","今天":"今天","明天":"明天","昨天":"昨天","认识":"認識","觉得":"覺得","认为":"認為","知道":"知道","看到":"看到","听到":"聽到","说":"說","话":"話","让":"讓","过":"過","进":"進","远":"遠","运":"運","还":"還","这":"這","会":"會","对":"對","发":"發","为":"為","么":"麼","么":"麼","干":"幹","么":"麼","云":"雲","电":"電","龙":"龍","龟":"龜","马":"馬","鸟":"鳥","鱼":"魚","门":"門","问":"問","间":"間","开":"開","关":"關","东":"東","车":"車","书":"書","画":"畫","话":"話","让":"讓","认":"認","识":"識","记":"記","讲":"講","许":"許","论":"論","设":"設","试":"試","证":"證","议":"議","响":"響","严":"嚴","丽":"麗","举":"舉","乐":"樂","习":"習","乡":"鄉","买":"買","乱":"亂","争":"爭","事":"事","交":"交","产":"產","亲":"親","仅":"僅","尽":"盡","惊":"驚","惠":"惠","恶":"惡","惭":"慚","惨":"慘","惯":"慣","愿":"願","懒":"懶","戏":"戲","战":"戰","户":"戶","房":"房","所":"所","扁":"扁","才":"才","扎":"紮","扑":"撲","打":"打","托":"託","执":"執","扩":"擴","扫":"掃","扬":"揚","批":"批","找":"找","护":"護","报":"報","拟":"擬","拢":"攏","拥":"擁","择":"擇","挂":"掛","指":"指","按":"按","挥":"揮","损":"損","捡":"撿","换":"換","掠":"掠","探":"探","接":"接","推":"推","掷":"擲","揭":"揭","搞":"搞","携":"攜","摄":"攝","摆":"擺","摇":"搖","摊":"攤","撑":"撐","撒":"撒","播":"播","搜":"搜","搞":"搞","撤":"撤","撑":"撐","旧":"舊","时":"時","显":"顯","晓":"曉","晕":"暈","晚":"晚","晨":"晨","畅":"暢","暂":"暫","术":"術","机":"機","杀":"殺","杂":"雜","权":"權","条":"條","来":"來","杨":"楊","杰":"傑","松":"鬆","极":"極","构":"構","枞":"樅","枢":"樞","枣":"棗","栏":"欄","树":"樹","桥":"橋","桦":"樺","检":"檢","梦":"夢","欢":"歡","欣":"欣","欧":"歐","欲":"慾","欺":"欺","款":"款","欢":"歡","止":"止","正":"正","此":"此","步":"步","武":"武","歪":"歪","死":"死","歹":"歹","残":"殘","每":"每","毒":"毒","毕":"畢","毫":"毫","毡":"氈","气":"氣","水":"水","氽":"汆","污":"汙","汤":"湯","汹":"洶","沉":"沉","沟":"溝","没":"沒","沥":"瀝","沦":"淪","沧":"滄","沪":"滬","浅":"淺","浓":"濃","泽":"澤","洁":"潔","洒":"灑","洗":"洗","洛":"洛","洞":"洞","津":"津","洪":"洪","洲":"洲","活":"活","洼":"窪","派":"派","流":"流","浅":"淺","浆":"漿","浇":"澆","浊":"濁","测":"測","济":"濟","浑":"渾","浓":"濃","涂":"塗","涌":"湧","涛":"濤","涝":"澇","涡":"渦","润":"潤","涩":"澀","浪":"浪","涨":"漲","烫":"燙","涤":"滌","涛":"濤","涟":"漣","涣":"渙","涤":"滌","渐":"漸","湾":"灣","湿":"濕","溃":"潰","溅":"濺","滢":"瀅","滥":"濫","滨":"濱","滩":"灘","澈":"澈","澜":"瀾","潮":"潮","澄":"澄","澈":"澈","澎":"澎","澜":"瀾","澳":"澳","潇":"瀟","澡":"澡","激":"激","濒":"瀕","濑":"瀨","濒":"瀕"};
+// 補充片語（先換片語，再逐字）
+const PHRASE_S2T={"头发":"頭髮","后面":"後面","里面":"裡面","外面":"外面","干什么":"幹什麼","为什么":"為什麼","这么":"這麼","怎么":"怎麼","这样":"這樣","这里":"這裡","那里":"那裡","哪里":"哪裡","这些":"這些","那些":"那些","这个":"這個","那个":"那個","什么":"什麼","认识":"認識","觉得":"覺得","知道":"知道","看到":"看到","听到":"聽到","说":"說","软件":"軟件","网络":"網絡","视频":"影片","鼠标":"滑鼠","打印机":"打印機","手机":"手機","电脑":"電腦"};
+const PHRASE_T2S={"頭髮":"头发","後面":"后面","裡面":"里面","為什麼":"为什么","這麼":"这么","怎麼":"怎么","這樣":"这样","這裡":"这里","那裡":"那里","哪裡":"哪里","這些":"这些","那些":"那些","這個":"这个","那個":"那个","什麼":"什么","認識":"认识","覺得":"觉得","聽到":"听到","軟件":"软件","網絡":"网络","影片":"视频","滑鼠":"鼠标","打印機":"打印机","手機":"手机","電腦":"电脑"};
+function convert(text,mode){
+ if(mode==="none") return text;
+ let phrase = mode==="s2t"?PHRASE_S2T:PHRASE_T2S;
+ let map = mode==="s2t"?S2T:null;
+ if(mode==="t2s"){ map={}; for(let k in S2T) map[S2T[k]]=k; }
+ for(let k in phrase) text=text.split(k).join(phrase[k]);
+ if(map) text=text.split("").map(c=>map[c]||c).join("");
+ return text;
+}
+let chapters=[];
+function splitChapters(text){
+ const lines=text.split(/\r?\n/);
+ const re=/^\s*(第[一二三四五六七八九十百千\d]+[章回卷節篇]|Chapter\s*\d+|序章|楔子|番外|前言|終章|後記|第\d+章)/;
+ let cur={title:"開頭",content:[]};
+ let out=[];
+ lines.forEach(l=>{
+   if(re.test(l.trim()) && l.trim().length<60){
+     if(cur.content.join("\n").trim()||cur.title!=="開頭") out.push(cur);
+     cur={title:l.trim(),content:[]};
+   } else cur.content.push(l);
+ });
+ out.push(cur);
+ if(out.length===1 && document.getElementById("split").value==="one") return out;
+ // 若第一章為空開頭，移除
+ if(out.length>1 && !out[0].content.join("").trim()) out.shift();
+ return out;
+}
+function render(){
+ const list=document.getElementById("chapters"); list.innerHTML="";
+ chapters.forEach((c,i)=>{let d=document.createElement("div");d.textContent=(i+1)+". "+c.title+" ("+c.content.join("\n").length+"字)";d.onclick=()=>{document.querySelectorAll(".chapters div").forEach(e=>e.classList.remove("active"));d.classList.add("active");document.getElementById("preview").textContent=c.title+"\n\n"+c.content.join("\n");};if(i===0)d.click();list.appendChild(d);});
+}
+document.getElementById("file").addEventListener("change",e=>{let f=e.target.files[0];if(!f)return;let r=new FileReader();r.onload=()=>{document.getElementById("input").value=r.result;};r.readAsText(f);});
+document.getElementById("previewBtn").onclick=()=>{
+ let raw=document.getElementById("input").value.trim(); if(!raw){alert("請先貼文字或上傳 TXT");return;}
+ let conv=document.getElementById("conv").value;
+ let txt=convert(raw,conv);
+ chapters=splitChapters(txt);
+ document.getElementById("stats").textContent="共 "+chapters.length+" 章 · 全文 "+txt.length+" 字 · 轉換："+document.getElementById("conv").selectedOptions[0].text;
+ render();
+};
+function esc(s){return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
+function xhtml(title,body){return '<?xml version="1.0" encoding="utf-8"?>\n<!DOCTYPE html><html xmlns="http://www.w3.org/1999/xhtml"><head><title>'+esc(title)+'</title><link rel="stylesheet" href="../Styles/style.css"/></head><body><h1>'+esc(title)+'</h1>'+body.split(/\n\s*\n/).map(p=>"<p>"+esc(p).replace(/\n/g,"<br/>")+"</p>").join("")+'</body></html>';}
+document.getElementById("downloadBtn").onclick=async()=>{
+ if(!chapters.length) document.getElementById("previewBtn").click();
+ if(!chapters.length) return;
+ let title=document.getElementById("title").value||"我的小說";
+ let author=document.getElementById("author").value||"作者";
+ let zip=new JSZip();
+ zip.file("mimetype","application/epub+zip",{compression:"STORE"});
+ zip.folder("META-INF").file("container.xml",'<?xml version="1.0"?><container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>');
+ let oebps=zip.folder("OEBPS"); oebps.folder("Styles").file("style.css","body{font-family:serif;line-height:1.8;margin:5%}h1{font-size:1.4em}p{text-indent:2em;margin:.5em 0}");
+ let manifest="",spine="",toc="";
+ chapters.forEach((c,i)=>{let fn="Text/ch"+(i+1)+".xhtml";oebps.file(fn,xhtml(c.title,c.content.join("\n")));manifest+='<item id="ch'+(i+1)+'" href="'+fn+'" media-type="application/xhtml+xml"/>';spine+='<itemref idref="ch'+(i+1)+'"/>';toc+='<navPoint id="np'+(i+1)+'" playOrder="'+(i+1)+'"><navLabel><text>'+esc(c.title)+'</text></navLabel><content src="'+fn+'"/></navPoint>';});
+ oebps.file("Text/nav.xhtml",'<?xml version="1.0" encoding="utf-8"?><!DOCTYPE html><html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><head><title>目錄</title></head><body><nav epub:type="toc"><ol>'+chapters.map((c,i)=>'<li><a href="Text/ch'+(i+1)+'.xhtml">'+esc(c.title)+'</a></li>').join("")+'</ol></nav></body></html>');
+ oebps.file("content.opf",'<?xml version="1.0" encoding="UTF-8"?><package xmlns="http://www.idpf.org/2007/opf" unique-identifier="bookid" version="3.0"><metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>'+esc(title)+'</dc:title><dc:creator>'+esc(author)+'</dc:creator><dc:language>zh-Hant</dc:language><dc:identifier id="bookid">urn:uuid:'+Date.now()+'</dc:identifier></metadata><manifest><item id="nav" href="Text/nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>'+manifest+'<item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/></manifest><spine>'+spine+'</spine></package>');
+ oebps.file("toc.ncx",'<?xml version="1.0" encoding="UTF-8"?><ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1"><head></head><docTitle><text>'+esc(title)+'</text></docTitle><navMap>'+toc+'</navMap></ncx>');
+ let blob=await zip.generateAsync({type:"blob"});
+ let a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=title+".epub";a.click();
+};
+// 範例
+window.addEventListener("load",()=>{document.getElementById("input").value="第1章 開始\n這是一個範例。認識這個世界，為什麼會來到這裡？\n後面還有很多故事。\n\n第2章 繼續\n這裡是第二章的內容，看到這裡就代表分章成功了。";});
+</script></body></html>
