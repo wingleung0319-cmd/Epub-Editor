@@ -2,29 +2,6 @@
 <html lang="zh-Hant-HK"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>EPUB Editor - TXT 轉 EPUB + 繁簡轉換</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js">
-document.getElementById("btnS2T").onclick=()=>{
-  let inp=document.getElementById("convTestIn").value;
-  let out=convert(inp,"s2t");
-  document.getElementById("convTestOut").value=out;
-  let changed=[...inp].filter((c,i)=>c!==out[i]).length;
-  document.getElementById("convTestMsg").textContent="簡→繁完成：全文 "+inp.length+" 字，轉咗 "+changed+" 個字。"+(changed===0?"（0個 = 你貼嗰段本身已經係繁體，或者嗰啲字簡繁一樣）":"");
-};
-document.getElementById("btnT2S").onclick=()=>{
-  let inp=document.getElementById("convTestIn").value;
-  let out=convert(inp,"t2s");
-  document.getElementById("convTestOut").value=out;
-  let changed=[...inp].filter((c,i)=>c!==out[i]).length;
-  document.getElementById("convTestMsg").textContent="繁→簡完成：全文 "+inp.length+" 字，轉咗 "+changed+" 個字。"+(changed===0?"（0個 = 你貼嗰段本身已經係簡體，或者嗰啲字簡繁一樣）":"");
-};
-document.getElementById("btnUseResult").onclick=()=>{
-  let out=document.getElementById("convTestOut").value;
-  if(!out){alert("請先㩒上面轉換掣");return;}
-  document.getElementById("input").value=out;
-  document.getElementById("conv").value="none";
-  document.getElementById("previewBtn").click();
-  window.scrollTo(0,document.body.scrollHeight);
-  alert("已送去下面，繁簡轉換選項已設為「不轉換」，避免重複轉兩次");
-};
 </script>
 <style>body{font-family:-apple-system,"PingFang HK","Microsoft JhengHei",sans-serif;background:#f6f7f9;margin:0;color:#111}header{background:#111;color:#fff;padding:18px 20px}header h1{margin:0;font-size:22px}header p{margin:6px 0 0;opacity:.8}.wrap{max-width:1100px;margin:0 auto;padding:16px;display:grid;grid-template-columns:1fr 1fr;gap:16px}@media(max-width:800px){.wrap{grid-template-columns:1fr}}.card{background:#fff;border-radius:14px;padding:16px;box-shadow:0 2px 12px rgba(0,0,0,.06)}label{display:block;font-weight:700;margin:12px 0 6px}input,select,textarea{width:100%;box-sizing:border-box;border:1px solid #ddd;border-radius:10px;padding:10px;font-size:15px}textarea{min-height:280px;line-height:1.7}button{border:0;border-radius:10px;padding:12px 16px;font-weight:800;cursor:pointer;background:#111;color:#fff;width:100%;margin-top:12px}button.secondary{background:#eee;color:#111}button:disabled{opacity:.5}.row{display:flex;gap:8px}.row button{flex:1}.chip{display:inline-block;background:#eef;padding:4px 10px;border-radius:999px;font-size:13px;margin:2px}.chapters{max-height:300px;overflow:auto;border:1px solid #eee;border-radius:10px;padding:8px}.chapters div{padding:8px;border-bottom:1px solid #f0f0f0;cursor:pointer}.chapters div.active{background:#fff3c4}.preview{white-space:pre-wrap;line-height:1.8;max-height:420px;overflow:auto;background:#fafafa;padding:12px;border-radius:10px}.small{font-size:13px;color:#666}</style></head>
 <body><header><h1>EPUB Editor</h1><p>TXT 轉 EPUB + 繁簡轉換 · 全部喺瀏覽器本地做，唔上傳</p></header>
@@ -123,5 +100,28 @@ document.getElementById("downloadBtn").onclick=async()=>{ document.getElementByI
 };
 // 範例
 window.addEventListener("load",()=>{document.getElementById("input").value="第1章 開始\n這是一個範例。認識這個世界，為什麼會來到這裡？\n後面還有很多故事。\n\n第2章 繼續\n這裡是第二章的內容，看到這裡就代表分章成功了。";});
-</script></body></html>
+document.getElementById("btnS2T").onclick=()=>{
+  let inp=document.getElementById("convTestIn").value;
+  let out=convert(inp,"s2t");
+  document.getElementById("convTestOut").value=out;
+  let changed=[...inp].filter((c,i)=>c!==out[i]).length;
+  document.getElementById("convTestMsg").textContent="簡→繁完成：全文 "+inp.length+" 字，轉咗 "+changed+" 個字。"+(changed===0?"（0個 = 你貼嗰段本身已經係繁體，或者嗰啲字簡繁一樣）":"");
+};
+document.getElementById("btnT2S").onclick=()=>{
+  let inp=document.getElementById("convTestIn").value;
+  let out=convert(inp,"t2s");
+  document.getElementById("convTestOut").value=out;
+  let changed=[...inp].filter((c,i)=>c!==out[i]).length;
+  document.getElementById("convTestMsg").textContent="繁→簡完成：全文 "+inp.length+" 字，轉咗 "+changed+" 個字。"+(changed===0?"（0個 = 你貼嗰段本身已經係簡體，或者嗰啲字簡繁一樣）":"");
+};
+document.getElementById("btnUseResult").onclick=()=>{
+  let out=document.getElementById("convTestOut").value;
+  if(!out){alert("請先㩒上面轉換掣");return;}
+  document.getElementById("input").value=out;
+  document.getElementById("conv").value="none";
+  document.getElementById("previewBtn").click();
+  window.scrollTo(0,document.body.scrollHeight);
+  alert("已送去下面，繁簡轉換選項已設為「不轉換」，避免重複轉兩次");
+};
 
+</script></body></html>
