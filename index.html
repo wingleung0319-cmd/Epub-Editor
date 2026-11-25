@@ -1,9 +1,43 @@
 <!DOCTYPE html>
 <html lang="zh-Hant-HK"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>EPUB Editor - TXT 轉 EPUB + 繁簡轉換</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js">
+document.getElementById("btnS2T").onclick=()=>{
+  let inp=document.getElementById("convTestIn").value;
+  let out=convert(inp,"s2t");
+  document.getElementById("convTestOut").value=out;
+  let changed=[...inp].filter((c,i)=>c!==out[i]).length;
+  document.getElementById("convTestMsg").textContent="簡→繁完成：全文 "+inp.length+" 字，轉咗 "+changed+" 個字。"+(changed===0?"（0個 = 你貼嗰段本身已經係繁體，或者嗰啲字簡繁一樣）":"");
+};
+document.getElementById("btnT2S").onclick=()=>{
+  let inp=document.getElementById("convTestIn").value;
+  let out=convert(inp,"t2s");
+  document.getElementById("convTestOut").value=out;
+  let changed=[...inp].filter((c,i)=>c!==out[i]).length;
+  document.getElementById("convTestMsg").textContent="繁→簡完成：全文 "+inp.length+" 字，轉咗 "+changed+" 個字。"+(changed===0?"（0個 = 你貼嗰段本身已經係簡體，或者嗰啲字簡繁一樣）":"");
+};
+document.getElementById("btnUseResult").onclick=()=>{
+  let out=document.getElementById("convTestOut").value;
+  if(!out){alert("請先㩒上面轉換掣");return;}
+  document.getElementById("input").value=out;
+  document.getElementById("conv").value="none";
+  document.getElementById("previewBtn").click();
+  window.scrollTo(0,document.body.scrollHeight);
+  alert("已送去下面，繁簡轉換選項已設為「不轉換」，避免重複轉兩次");
+};
+</script>
 <style>body{font-family:-apple-system,"PingFang HK","Microsoft JhengHei",sans-serif;background:#f6f7f9;margin:0;color:#111}header{background:#111;color:#fff;padding:18px 20px}header h1{margin:0;font-size:22px}header p{margin:6px 0 0;opacity:.8}.wrap{max-width:1100px;margin:0 auto;padding:16px;display:grid;grid-template-columns:1fr 1fr;gap:16px}@media(max-width:800px){.wrap{grid-template-columns:1fr}}.card{background:#fff;border-radius:14px;padding:16px;box-shadow:0 2px 12px rgba(0,0,0,.06)}label{display:block;font-weight:700;margin:12px 0 6px}input,select,textarea{width:100%;box-sizing:border-box;border:1px solid #ddd;border-radius:10px;padding:10px;font-size:15px}textarea{min-height:280px;line-height:1.7}button{border:0;border-radius:10px;padding:12px 16px;font-weight:800;cursor:pointer;background:#111;color:#fff;width:100%;margin-top:12px}button.secondary{background:#eee;color:#111}button:disabled{opacity:.5}.row{display:flex;gap:8px}.row button{flex:1}.chip{display:inline-block;background:#eef;padding:4px 10px;border-radius:999px;font-size:13px;margin:2px}.chapters{max-height:300px;overflow:auto;border:1px solid #eee;border-radius:10px;padding:8px}.chapters div{padding:8px;border-bottom:1px solid #f0f0f0;cursor:pointer}.chapters div.active{background:#fff3c4}.preview{white-space:pre-wrap;line-height:1.8;max-height:420px;overflow:auto;background:#fafafa;padding:12px;border-radius:10px}.small{font-size:13px;color:#666}</style></head>
 <body><header><h1>EPUB Editor</h1><p>TXT 轉 EPUB + 繁簡轉換 · 全部喺瀏覽器本地做，唔上傳</p></header>
+
+<div style="max-width:1100px;margin:16px auto 0;padding:0 16px"><div class="card" style="border:2px solid #111">
+<h2 style="margin:0">🔄 繁簡轉換測試（先喺呢度試，確認轉到先再落去）</h2>
+<p class="small">貼一句簡體/繁體，㩒掣即刻轉，唔使按預覽。</p>
+<textarea id="convTestIn" style="min-height:80px">这是一个例子，认识这个世界，为什么会来到这里？头发后面里面软件网络发展发现</textarea>
+<div class="row"><button id="btnS2T" type="button">簡體 → 繁體</button><button id="btnT2S" type="button" class="secondary">繁體 → 簡體</button></div>
+<textarea id="convTestOut" style="min-height:80px" readonly placeholder="轉換結果會喺呢度"></textarea>
+<p id="convTestMsg" class="small">未測試</p>
+<button id="btnUseResult" type="button" class="secondary">將轉換結果送去下面做 EPUB →</button>
+</div></div>
 <div class="wrap">
 <div class="card"><h2 style="margin:0">1. 輸入文字</h2>
 <label>上傳 TXT</label><input type="file" id="file" accept=".txt,text/plain">
@@ -70,7 +104,7 @@ document.getElementById("previewBtn").onclick=()=>{
 function esc(s){return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
 function xhtml(title,body){return '<?xml version="1.0" encoding="utf-8"?>\n<!DOCTYPE html><html xmlns="http://www.w3.org/1999/xhtml"><head><title>'+esc(title)+'</title><link rel="stylesheet" href="../Styles/style.css"/></head><body><h1>'+esc(title)+'</h1>'+body.split(/\n\s*\n/).map(p=>"<p>"+esc(p).replace(/\n/g,"<br/>")+"</p>").join("")+'</body></html>';}
 document.getElementById("conv").addEventListener("change",()=>{ document.getElementById("previewBtn").click(); });
-document.getElementById("downloadBtn").onclick=async()=>{
+document.getElementById("downloadBtn").onclick=async()=>{ document.getElementById("previewBtn").click();
  if(!chapters.length) document.getElementById("previewBtn").click();
  if(!chapters.length) return;
  let title=document.getElementById("title").value||"我的小說";
