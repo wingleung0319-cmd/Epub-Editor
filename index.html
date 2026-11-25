@@ -41,25 +41,8 @@
     <h1>Birdy EPUB Converter</h1>
     <p>TXT 轉 EPUB + 繁簡轉換 · 全部喺瀏覽器本地做，唔上傳</p>
   </div>
-  <div class="version" title="OpenCC 完整字典 + 香港 hkp 詞組">v1.2.0</div>
+  <div class="version" title="OpenCC 完整字典 + 香港 hkp 詞組">v1.3.0</div>
 </header>
-
-<div style="max-width:1100px;margin:16px auto 0;padding:0 16px">
-  <div class="card" style="border:2px solid #111">
-    <h2 style="margin:0">🔄 繁簡轉換測試</h2>
-    <p class="small">必須等 OpenCC 完整字典載入完成先轉換，否則會留簡體。狀態變綠先㩒掣。</p>
-    <div id="loadStatus" class="small warn">⏳ 載入 OpenCC 完整字庫中（約 1MB，第一次要幾秒）…</div>
-    <div class="loading-bar" id="loadBar"><div></div></div>
-    <textarea id="convTestIn" style="min-height:90px">这是一个例子，认识这个世界，为什么会来到这里？头发后面里面软件网络发展发现 服务器 鼠标 视频 软件 体验证 衔蝉 服务器鼠标视频软件网络</textarea>
-    <div class="row">
-      <button id="btnS2T" type="button" disabled>簡體 → 繁體 (HK)</button>
-      <button id="btnT2S" type="button" class="secondary" disabled>繁體 → 簡體</button>
-    </div>
-    <textarea id="convTestOut" style="min-height:90px" readonly placeholder="轉換結果會喺呢度"></textarea>
-    <p id="convTestMsg" class="small">未測試</p>
-    <button id="btnUseResult" type="button" class="secondary" disabled>將轉換結果送去下面做 EPUB →</button>
-  </div>
-</div>
 
 <div class="wrap">
   <div class="card">
@@ -84,11 +67,27 @@
       <option value="s2t_tw">簡體 → 繁體 (台灣 twp，含詞組)</option>
       <option value="t2s">繁體 → 簡體</option>
     </select>
-    <label>分章規則</label>
+    <label>分章模式</label>
     <select id="split">
-      <option value="auto">自動分章（第X章 / 第X回 / Chapter）</option>
-      <option value="one">成書一章</option>
+      <option value="auto">自動分章（用下面自設規則）</option>
+      <option value="manual">手動分章（先自動切一次，再喺右邊逐章拆 / 合 / 改名）</option>
+      <option value="one">成書一章（唔分章）</option>
     </select>
+    <label>自設分章定義 — 預設規則</label>
+    <select id="splitPreset">
+      <option value="default">預設：第X章 / 第X回 / 第X卷 / Chapter / 序章 / 番外 / 終章</option>
+      <option value="chapter_only">只認：第X章</option>
+      <option value="hui_only">只認：第X回</option>
+      <option value="custom">自訂：只用下面 Regex / 關鍵字</option>
+    </select>
+    <label>自訂 Regex（一行一個，例如 ^第.+章 或 ^Chapter）</label>
+    <textarea id="customPattern" style="min-height:64px" placeholder="^第.+章"></textarea>
+    <label>自訂關鍵字（一行一個，行內包含即分章，例如：楔子 / 番外 / 卷一）</label>
+    <textarea id="customKeywords" style="min-height:64px" placeholder="楔子"></textarea>
+    <label style="font-weight:400"><input type="checkbox" id="splitUseRegex" checked style="width:auto"> 自訂 Regex 當正則用（唔勾 = 當普通文字包含即分章）</label>
+    <label>手動分章標記（可選）：內文出現呢行即分章，例如 --- 或 ***</label>
+    <input id="manualMarker" placeholder="例如：---  留空即唔用">
+    <p class="small">用法：自動 = 上面規則自動切；手動 = 先自動切一次，之後喺右邊逐章拆 / 合 / 改名，仲可以輸入行號拆開。</p>
     <button id="previewBtn" disabled>預覽轉換 + 分章</button>
     <button id="downloadBtn" class="secondary" disabled>⬇ 生成並下載 EPUB</button>
     <p class="small" id="mainStatus">請等 OpenCC 載入完成後再操作</p>
@@ -100,6 +99,12 @@
     <div class="chapters" id="chapters"><div>按「預覽」先</div></div>
     <h3>內容預覽（點章節可切換）</h3>
     <div class="preview" id="preview">—</div>
+    <h3 style="margin-top:14px">手動分章</h3>
+    <p class="small">先點上面章節列表揀一章，再喺下面操作。拆分會問喺第幾行拆（第 1 行 = 標題行）。</p>
+    <div class="row"><button id="btnRename" type="button" class="secondary">改選中章節名</button><button id="btnMergePrev" type="button" class="secondary">合併去上一章</button></div>
+    <div class="row"><input id="splitLineNo" type="number" min="2" placeholder="喺第幾行拆，例如 20" style="flex:1"><button id="btnSplitAt" type="button">喺呢行拆開做新章</button></div>
+    <div class="row"><button id="btnAddChapter" type="button" class="secondary">喺最後加一空章</button><button id="btnDeleteChapter" type="button" class="secondary">刪除選中章節</button></div>
+    <p class="small" id="manualHint">未選章節 · 點上面章節列表先</p>
   </div>
 </div>
 
@@ -107,7 +112,7 @@
 /* ========== OpenCC 載入 ========== */
 let ccS2T = null, ccS2T_tw = null, ccT2S = null;
 let openccReady = false;
-const APP_VERSION = "1.2.0";
+const APP_VERSION = "1.3.0";
 
 function setStatus(msg, cls) {
   const el = document.getElementById("loadStatus");
@@ -118,7 +123,7 @@ function setStatus(msg, cls) {
 
 function enableUI(ready) {
   openccReady = ready;
-  ["btnS2T","btnT2S","btnUseResult","previewBtn","downloadBtn"].forEach(id => {
+  ["previewBtn","downloadBtn"].forEach(id => {
     const b = document.getElementById(id);
     if (b) b.disabled = !ready;
   });
@@ -193,15 +198,47 @@ function convert(text, mode) {
   return text;
 }
 
-/* ========== 分章 ========== */
+/* ========== 分章（自設定義 + 手動） ========== */
 let chapters = [];
+let selectedChapter = 0;
+function getChapterMatchers(){
+  const preset = (document.getElementById("splitPreset")||{value:"default"}).value;
+  const useRegex = document.getElementById("splitUseRegex") ? document.getElementById("splitUseRegex").checked : true;
+  const patText = (document.getElementById("customPattern")||{value:""}).value.trim();
+  const kwText = (document.getElementById("customKeywords")||{value:""}).value.trim();
+  const marker = (document.getElementById("manualMarker")||{value:""}).value.trim();
+  let regexes = [], keywords = [];
+  if (preset !== "custom") {
+    if (preset === "default") regexes.push(/^\s*(第[一二三四五六七八九十百千零〇\d]+[章回卷節篇]|Chapter\s*\d+|序章|楔子|番外|前言|終章|後記|第\d+章)/i);
+    if (preset === "chapter_only") regexes.push(/^\s*第[一二三四五六七八九十百千零〇\d]+章/i);
+    if (preset === "hui_only") regexes.push(/^\s*第[一二三四五六七八九十百千零〇\d]+回/i);
+  }
+  if (patText) {
+    patText.split(/\r?\n/).map(s=>s.trim()).filter(Boolean).forEach(s=>{
+      if (useRegex) { try { regexes.push(new RegExp(s, "i")); } catch(e) { keywords.push(s); } }
+      else keywords.push(s);
+    });
+  }
+  if (kwText) kwText.split(/\r?\n/).map(s=>s.trim()).filter(Boolean).forEach(s=>keywords.push(s));
+  if (marker) keywords.push(marker);
+  return { regexes, keywords };
+}
+function isChapterLine(line){
+  const t = line.trim();
+  if (!t || t.length >= 80) return false;
+  const m = getChapterMatchers();
+  for (const re of m.regexes) { try { if (re.test(t)) return true; } catch(e){} }
+  for (const k of m.keywords) { if (k && t.includes(k)) return true; }
+  return false;
+}
 function splitChapters(text) {
+  const mode = (document.getElementById("split")||{value:"auto"}).value;
+  if (mode === "one") return [{ title: "全文", content: text.split(/\r?\n/) }];
   const lines = text.split(/\r?\n/);
-  const re = /^\s*(第[一二三四五六七八九十百千零〇\d]+[章回卷節篇]|Chapter\s*\d+|序章|楔子|番外|前言|終章|後記|第\d+章)/i;
   let cur = { title: "開頭", content: [] };
   let out = [];
   lines.forEach(l => {
-    if (re.test(l.trim()) && l.trim().length < 80) {
+    if (isChapterLine(l)) {
       if (cur.content.join("\n").trim() || cur.title !== "開頭") out.push(cur);
       cur = { title: l.trim(), content: [] };
     } else {
@@ -209,11 +246,9 @@ function splitChapters(text) {
     }
   });
   out.push(cur);
-  if (out.length === 1 && document.getElementById("split").value === "one") return out;
   if (out.length > 1 && !out[0].content.join("").trim()) out.shift();
   return out;
 }
-
 function render() {
   const list = document.getElementById("chapters");
   list.innerHTML = "";
@@ -221,13 +256,19 @@ function render() {
     const d = document.createElement("div");
     d.textContent = (i + 1) + ". " + c.title + " (" + c.content.join("\n").length + "字)";
     d.onclick = () => {
+      selectedChapter = i;
       document.querySelectorAll(".chapters div").forEach(e => e.classList.remove("active"));
       d.classList.add("active");
-      document.getElementById("preview").textContent = c.title + "\n\n" + c.content.join("\n");
+      const full = c.title + "\n" + c.content.join("\n");
+      document.getElementById("preview").textContent = full + "\n\n--- 行號提示：第 1 行 = 標題，之後每行 +1 ---";
+      const hint = document.getElementById("manualHint");
+      if (hint) hint.textContent = "已選：第 " + (i+1) + " 章《" + c.title + "》· 共 " + (c.content.length+1) + " 行";
     };
-    if (i === 0) d.click();
+    if (i === selectedChapter) d.classList.add("active");
+    if (i === 0 && chapters.length) d.click();
     list.appendChild(d);
   });
+  if (!chapters.length) { const hint=document.getElementById("manualHint"); if(hint) hint.textContent="未選章節"; }
 }
 
 /* ========== 事件 ========== */
@@ -248,7 +289,7 @@ document.getElementById("previewBtn").onclick = () => {
     if (conv !== "none" && txt !== raw) {
       document.getElementById("input").value = txt;
     }
-    chapters = splitChapters(txt);
+    chapters = splitChapters(txt); selectedChapter = 0;
     document.getElementById("stats").textContent =
       "共 " + chapters.length + " 章 · 全文 " + txt.length + " 字 · 轉換：" +
       document.getElementById("conv").selectedOptions[0].text;
@@ -336,45 +377,54 @@ document.getElementById("downloadBtn").onclick = async () => {
   }
 };
 
-/* 測試區 */
-document.getElementById("btnS2T").onclick = () => {
-  try {
-    const inp = document.getElementById("convTestIn").value;
-    const out = convert(inp, "s2t");
-    document.getElementById("convTestOut").value = out;
-    const changed = [...inp].filter((c, i) => c !== out[i]).length;
-    const remain = (out.match(/[这国时会来对说过还进开关东车书长门问间见头发后里面软网络发现认知识觉得知道听说请读写学习电脑手机视频鼠标服务器体验证衔蝉]/g) || []).length;
-    document.getElementById("convTestMsg").innerHTML =
-      "簡→繁完成：全文 " + inp.length + " 字，轉咗約 " + changed + " 個位置。" +
-      (remain ? ' <span class="warn">仍偵測到 ' + remain + ' 個常見簡體字元</span>' :
-        ' <span class="ok">✓ 常見簡體已全部轉換</span>');
-  } catch (e) {
-    alert(e.message);
-  }
+/* ========== 手動分章操作 ========== */
+document.getElementById("btnRename").onclick = () => {
+  if (!chapters.length) return alert("請先預覽");
+  const cur = chapters[selectedChapter];
+  const nv = prompt("新章節名：", cur.title);
+  if (nv !== null && nv.trim()) { cur.title = nv.trim(); render(); }
+};
+document.getElementById("btnMergePrev").onclick = () => {
+  if (!chapters.length) return alert("請先預覽");
+  if (selectedChapter <= 0) return alert("已經係第一章，冇上一章可合併");
+  const cur = chapters[selectedChapter];
+  const prev = chapters[selectedChapter - 1];
+  prev.content = prev.content.concat([cur.title], cur.content);
+  chapters.splice(selectedChapter, 1);
+  selectedChapter = Math.max(0, selectedChapter - 1);
+  render();
+};
+document.getElementById("btnSplitAt").onclick = () => {
+  if (!chapters.length) return alert("請先預覽");
+  const n = parseInt(document.getElementById("splitLineNo").value, 10);
+  const cur = chapters[selectedChapter];
+  const total = cur.content.length + 1;
+  if (!n || n < 2 || n > total) return alert("請輸入 2 ~ " + total + " 之間的行號（第 1 行 = 標題）");
+  const all = [cur.title].concat(cur.content);
+  const head = all.slice(0, n - 1), tail = all.slice(n - 1);
+  let newTitle = tail[0] ? tail[0].trim() : "新章節";
+  const inputTitle = prompt("新章節名（預設用拆開嗰行做標題）：", newTitle);
+  if (inputTitle === null) return;
+  if (inputTitle.trim()) newTitle = inputTitle.trim();
+  cur.content = head.slice(1);
+  const nc = { title: newTitle, content: tail.slice(1) };
+  chapters.splice(selectedChapter + 1, 0, nc);
+  render();
+};
+document.getElementById("btnAddChapter").onclick = () => {
+  const nv = prompt("新章節名：", "新章節");
+  if (nv === null) return;
+  chapters.push({ title: (nv.trim() || "新章節"), content: [] });
+  selectedChapter = chapters.length - 1; render();
+};
+document.getElementById("btnDeleteChapter").onclick = () => {
+  if (!chapters.length) return;
+  if (!confirm("確定刪除《" + chapters[selectedChapter].title + "》？")) return;
+  chapters.splice(selectedChapter, 1);
+  selectedChapter = Math.max(0, selectedChapter - 1);
+  render();
 };
 
-document.getElementById("btnT2S").onclick = () => {
-  try {
-    const inp = document.getElementById("convTestIn").value;
-    const out = convert(inp, "t2s");
-    document.getElementById("convTestOut").value = out;
-    const changed = [...inp].filter((c, i) => c !== out[i]).length;
-    document.getElementById("convTestMsg").textContent =
-      "繁→簡完成：全文 " + inp.length + " 字，轉咗約 " + changed + " 個位置。";
-  } catch (e) {
-    alert(e.message);
-  }
-};
-
-document.getElementById("btnUseResult").onclick = () => {
-  const out = document.getElementById("convTestOut").value;
-  if (!out) { alert("請先㩒上面轉換掣"); return; }
-  document.getElementById("input").value = out;
-  document.getElementById("conv").value = "none";
-  document.getElementById("previewBtn").click();
-  window.scrollTo(0, document.body.scrollHeight);
-  alert("已送去下面，繁簡轉換已設為「不轉換」");
-};
 
 window.addEventListener("load", () => {
   document.getElementById("input").value =
