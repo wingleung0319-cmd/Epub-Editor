@@ -41,7 +41,7 @@
     <h1>Birdy EPUB Converter</h1>
     <p>TXT / EPUB 轉 EPUB + 繁簡轉換 · 全部喺瀏覽器本地做，唔上傳</p>
   </div>
-  <div class="version" title="OpenCC 完整字典 + 香港 hkp 詞組">v1.6.3</div>
+  <div class="version" title="OpenCC 完整字典 + 香港 hkp 詞組">v1.6.4</div>
 </header>
 
 <div class="wrap">
@@ -77,8 +77,8 @@
     <label>內文段落格式</label>
     <label style="font-weight:400"><input type="checkbox" id="paraFormat" checked style="width:auto"> 轉為「內文段落格式」</label>
     <div id="paraFormatDetail" style="background:#fafafa;border:1px solid #eee;border-radius:10px;padding:10px 12px;font-size:13px;color:#444;line-height:1.7">
-      勾住 = 生成嘅 EPUB 會用：<br>
-      • 首行縮排 2 字元（text-indent: 2em）<br>
+      勾住 = 生成嘅 EPUB 會用全形空格 + CSS 雙重縮排（番茄只認全形空格）：<br>
+      • 首行縮排 2 字元（每段開頭加「　　」兩個全形空格 + text-indent: 2em，番茄都睇到）<br>
       • 段落間距：段落之間不空行（段前、段後距設為 0，margin: 0）<br>
       • 行距設定：1.5 倍行距（line-height: 1.5）<br>
       唔勾 = 用返舊格式：首行縮排 2 字、段間距 0.5em、行距 1.8
@@ -128,7 +128,7 @@
 /* ========== OpenCC 載入 ========== */
 let ccS2T = null, ccS2T_tw = null, ccT2S = null;
 let openccReady = false;
-const APP_VERSION = "1.6.3";
+const APP_VERSION = "1.6.4";
 
 function setStatus(msg, cls) {
   const el = document.getElementById("loadStatus");
@@ -561,7 +561,8 @@ function esc(s) {
 }
 
 function xhtml(title, body, usePara) {
-  // 番茄會無視外部 style.css，所以每段都要寫死 inline style + 每章 head 入面再寫一次 <style>
+  // 番茄會無視 text-indent + 外部 CSS，所以最穩係直接喺每段內容開頭加兩個全形空格「　　」
+  // 全形空格（U+3000）番茄唔會 trim 走，任何 Reader 都會顯示到縮排。CSS 照留做備用。
   const para = usePara !== false;
   const pInline = para
     ? 'text-indent:2em;margin:0;padding:0;line-height:1.5;'
@@ -580,7 +581,12 @@ function xhtml(title, body, usePara) {
     '<link rel="stylesheet" type="text/css" href="../Styles/style.css"/>' +
     '<style type="text/css">' + headStyle + '</style></head>' +
     '<body style="' + bodyInline + '"><h1 style="' + h1Inline + '">' + esc(title) + '</h1>' +
-    body.split(/\n\s*\n|\n/).map(p => p.trim()).filter(Boolean).map(p => '<p style="' + pInline + '">' + esc(p) + '</p>').join("") +
+    body.split(/\n\s*\n|\n/).map(p => p.trim()).filter(Boolean).map(p => {
+      // 已經有縮排就唔再加，避免變 4 字
+      const already = /^[　\s　]+/.test(p);
+      const text = para && !already ? "　　" + p : p;
+      return '<p style="' + pInline + '">' + esc(text) + '</p>';
+    }).join("") +
     '</body></html>';
 }
 
