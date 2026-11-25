@@ -41,7 +41,7 @@
     <h1>Birdy EPUB Converter</h1>
     <p>TXT / EPUB 轉 EPUB + 繁簡轉換 · 全部喺瀏覽器本地做，唔上傳</p>
   </div>
-  <div class="version" title="OpenCC 完整字典 + 香港 hkp 詞組">v1.5.1</div>
+  <div class="version" title="OpenCC 完整字典 + 香港 hkp 詞組">v1.5.2</div>
 </header>
 
 <div class="wrap">
@@ -119,7 +119,7 @@
 /* ========== OpenCC 載入 ========== */
 let ccS2T = null, ccS2T_tw = null, ccT2S = null;
 let openccReady = false;
-const APP_VERSION = "1.5.1";
+const APP_VERSION = "1.5.2";
 
 function setStatus(msg, cls) {
   const el = document.getElementById("loadStatus");
@@ -281,7 +281,6 @@ function render() {
 /* ========== EPUB 上傳：解包 -> 抽文字 -> 入返 TXT 流程 ========== */
 async function parseEpubFile(file){
   const zip = await JSZip.loadAsync(file);
-  // 1. 搵 OPF：先睇 container.xml，搵唔到就搵第一個 .opf
   let opfPath = "OEBPS/content.opf";
   const containerFile = zip.file("META-INF/container.xml");
   if (containerFile) {
@@ -299,63 +298,82 @@ async function parseEpubFile(file){
   const opfText = await zip.file(opfPath).async("string");
   const parser = new DOMParser();
   const opfDoc = parser.parseFromString(opfText, "application/xml");
-  // 2. 書名 / 作者
   const getTag = (tag) => {
     const el = opfDoc.getElementsByTagName(tag)[0] || opfDoc.getElementsByTagName("dc:"+tag.split(":").pop())[0];
     return el ? el.textContent.trim() : "";
   };
   const bookTitle = getTag("dc:title") || getTag("title");
   const bookAuthor = getTag("dc:creator") || getTag("creator");
-  // 3. manifest: id -> href
   const manifest = {};
+  const manifestProps = {};
   opfDoc.querySelectorAll("manifest > item").forEach(it => {
     manifest[it.getAttribute("id")] = it.getAttribute("href");
+    manifestProps[it.getAttribute("id")] = (it.getAttribute("properties") || "").toLowerCase();
   });
-  // 4. spine 順序
   const spineIds = [];
   opfDoc.querySelectorAll("spine > itemref").forEach(ir => spineIds.push(ir.getAttribute("idref")));
   const opfDir = opfPath.includes("/") ? opfPath.slice(0, opfPath.lastIndexOf("/")+1) : "";
-  // 5. 逐章抽文字
+  // 垃圾行：原 EPUB 嘅封面頁 / 目錄頁 / 工具浮水印，唔好當正文
+  const JUNK_RE = /^(cover|封面|目錄|目录|contents|toc|nav)$/i;
+  const JUNK_CONTAINS = ["e-booka.online", "EPUB Tools", "ebooka", "epub tools", "www.", "http://", "https://"];
+  function isJunkLine(t, chTitle){
+    if (!t) return true;
+    if (JUNK_RE.test(t)) return true;
+    for (const j of JUNK_CONTAINS) { if (t.toLowerCase().includes(j.toLowerCase())) return true; }
+    // 書名 + 工具名黐埋一齊嗰種，例如「我靠進化面板肝成天災_夢滿枝EPUB Tools」
+    if (bookTitle && t.includes(bookTitle) && t.length < bookTitle.length + 30) return true;
+    return false;
+  }
   let fullText = "";
   for (const id of spineIds) {
     let href = manifest[id];
     if (!href) continue;
-    if (href.toLowerCase().includes("nav.") || href.toLowerCase().includes("toc.")) continue;
-    // 解 URL encoding
+    const lowHref = href.toLowerCase();
+    const props = manifestProps[id] || "";
+    const lowId = (id || "").toLowerCase();
+    // FIX 1: 跳過封面 / 目錄 / nav / toc，唔好將佢哋當第一章
+    if (props.includes("cover-image")) continue;
+    if (lowId.includes("cover") || lowHref.includes("cover")) continue;
+    if (lowId.includes("nav") || lowHref.includes("nav.") || lowId.includes("toc") || lowHref.includes("toc.")) continue;
+    if (lowHref.endsWith(".ncx")) continue;
     try { href = decodeURIComponent(href); } catch(e){}
     const fullPath = (opfDir + href).replace(/\/\.\//g, "/");
     const entry = zip.file(fullPath) || zip.file(href) || zip.file(fullPath.split("/").pop());
     if (!entry) continue;
     const html = await entry.async("string");
     const doc = parser.parseFromString(html, "text/html");
-    // 抽標題：h1 / h2 / title
+    // 如果成頁只係一張圖（封面頁），跳過
+    const bodyEl = doc.body || doc;
+    const imgs = bodyEl.querySelectorAll("img");
+    const bodyTextLen = (bodyEl.textContent || "").trim().length;
+    if (imgs.length && bodyTextLen < 30) continue;
+    // 抽標題
     let chTitle = "";
     const h1 = doc.querySelector("h1");
     const h2 = doc.querySelector("h2");
     if (h1 && h1.textContent.trim()) chTitle = h1.textContent.trim();
     else if (h2 && h2.textContent.trim()) chTitle = h2.textContent.trim();
-    else if (doc.title && doc.title.trim()) chTitle = doc.title.trim();
-    // 抽正文：body 入面所有 p / h1-h6 / div，逐行
+    else if (doc.title && doc.title.trim() && !JUNK_RE.test(doc.title.trim())) chTitle = doc.title.trim();
+    if (chTitle && isJunkLine(chTitle, "")) chTitle = "";
+    // 抽正文：只取 p / h3-h6 / li / blockquote，唔好取 div（div 會重複 + 會將成頁黐埋一舊）
     const lines = [];
-    const body = doc.body || doc;
-    body.querySelectorAll("h1,h2,h3,h4,p,div,blockquote,li").forEach(el => {
-      // 跳過 nav / toc
+    bodyEl.querySelectorAll("p, h3, h4, h5, h6, blockquote, li").forEach(el => {
       if (el.closest("nav")) return;
       let t = (el.innerText || el.textContent || "").replace(/\s+/g, " ").trim();
-      // 避免重複：p 入面有巢狀 div 會重複，簡單過濾：只取最細層
-      if (el.tagName === "DIV" && el.querySelector("p")) return;
       if (!t) return;
-      // 如果同標題一樣，唔重複
       if (t === chTitle) return;
+      if (isJunkLine(t, chTitle)) return;
       lines.push(t);
     });
-    // 如果上面抽唔到，用 body textContent 分行
+    // 後備：如果冇 p，逐行取 body text
     if (!lines.length) {
-      const raw = (body.textContent || "").split(/\n/).map(s=>s.trim()).filter(Boolean);
-      lines.push(...raw);
+      const raw = (bodyEl.textContent || "").split(/\n/).map(s=>s.trim()).filter(Boolean);
+      raw.forEach(t => { if (!isJunkLine(t, chTitle) && t !== chTitle) lines.push(t); });
     }
-    if (chTitle) fullText += chTitle + "\n";
-    fullText += lines.join("\n") + "\n\n";
+    if (!lines.length) continue;
+    // FIX: 每個 p 用 \n\n 分開，等之後 xhtml 可以分返段
+    if (chTitle) fullText += chTitle + "\n\n";
+    fullText += lines.join("\n\n") + "\n\n";
   }
   return { text: fullText.trim(), title: bookTitle, author: bookAuthor };
 }
@@ -458,7 +476,7 @@ function xhtml(title, body) {
     '<head><title>' + esc(title) + '</title>' +
     '<link rel="stylesheet" href="../Styles/style.css"/></head>' +
     '<body><h1>' + esc(title) + '</h1>' +
-    body.split(/\n\s*\n/).map(p => "<p>" + esc(p).replace(/\n/g, "<br/>") + "</p>").join("") +
+    body.split(/\n\s*\n|\n/).map(p => p.trim()).filter(Boolean).map(p => "<p>" + esc(p) + "</p>").join("") +
     '</body></html>';
 }
 
