@@ -41,7 +41,7 @@
     <h1>Birdy EPUB Converter</h1>
     <p>TXT / EPUB 轉 EPUB + 繁簡轉換 · 全部喺瀏覽器本地做，唔上傳</p>
   </div>
-  <div class="version" title="OpenCC 完整字典 + 香港 hkp 詞組">v1.6.0</div>
+  <div class="version" title="OpenCC 完整字典 + 香港 hkp 詞組">v1.6.1</div>
 </header>
 
 <div class="wrap">
@@ -128,7 +128,7 @@
 /* ========== OpenCC 載入 ========== */
 let ccS2T = null, ccS2T_tw = null, ccT2S = null;
 let openccReady = false;
-const APP_VERSION = "1.6.0";
+const APP_VERSION = "1.6.1";
 
 function setStatus(msg, cls) {
   const el = document.getElementById("loadStatus");
@@ -265,6 +265,21 @@ function splitChapters(text) {
   if (out.length > 1 && !out[0].content.join("").trim()) out.shift();
   return out;
 }
+function renderPreviewForChapter(c, i){
+  const usePara = document.getElementById("paraFormat") ? document.getElementById("paraFormat").checked : true;
+  const preview = document.getElementById("preview");
+  const pStyle = usePara
+    ? "text-indent:2em;margin:0;padding:0;line-height:1.5;"
+    : "text-indent:2em;margin:.5em 0;padding:0;line-height:1.8;";
+  const titleStyle = usePara ? "margin:0 0 1em 0;line-height:1.5;" : "margin:0 0 .5em 0;line-height:1.8;";
+  // 段落：按 \n 切，每行一段，空行跳過
+  const paras = c.content.join("\n").split(/\n/).map(s=>s.trim()).filter(Boolean);
+  let html = '<div style="font-family:serif;"><h3 style="' + titleStyle + '">' + esc(c.title) + '</h3>';
+  html += paras.map(p => '<p style="' + pStyle + '">' + esc(p) + '</p>').join("");
+  html += '<p style="color:#999;font-size:13px;text-indent:0;margin-top:1em;">--- 行號提示：第 1 行 = 標題，之後每行 +1 · 當前格式：' + (usePara ? '內文段落格式（縮排 2 字、段距 0、行距 1.5）' : '舊格式（縮排 2 字、段距 0.5em、行距 1.8）') + ' ---</p></div>';
+  preview.innerHTML = html;
+}
+
 function render() {
   const list = document.getElementById("chapters");
   list.innerHTML = "";
@@ -275,8 +290,7 @@ function render() {
       selectedChapter = i;
       document.querySelectorAll(".chapters div").forEach(e => e.classList.remove("active"));
       d.classList.add("active");
-      const full = c.title + "\n" + c.content.join("\n");
-      document.getElementById("preview").textContent = full + "\n\n--- 行號提示：第 1 行 = 標題，之後每行 +1 ---";
+      renderPreviewForChapter(c, i);
       const hint = document.getElementById("manualHint");
       if (hint) hint.textContent = "已選：第 " + (i+1) + " 章《" + c.title + "》· 共 " + (c.content.length+1) + " 行";
     };
@@ -573,11 +587,9 @@ document.getElementById("downloadBtn").onclick = async () => {
 
 /* ========== 內文段落格式：預覽都跟返 ========== */
 function applyParaPreview(){
-  const p = document.getElementById("preview");
-  const usePara = document.getElementById("paraFormat") ? document.getElementById("paraFormat").checked : true;
-  if (!p) return;
-  if (usePara) { p.style.textIndent = "2em"; p.style.lineHeight = "1.5"; }
-  else { p.style.textIndent = "2em"; p.style.lineHeight = "1.8"; }
+  if (!chapters.length) return;
+  const c = chapters[selectedChapter];
+  if (c) renderPreviewForChapter(c, selectedChapter);
 }
 document.getElementById("paraFormat").addEventListener("change", applyParaPreview);
 
